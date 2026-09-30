@@ -114,6 +114,45 @@
     padding:12px;border-radius:12px;border:0;cursor:pointer}
   .actions a{background:var(--text);color:var(--bg)}
   .actions button{background:var(--mid);color:var(--text)}
+  .hd{display:flex;align-items:center;gap:12px}
+  .bell{background:var(--surface);border:0;color:var(--muted);width:36px;height:36px;border-radius:10px;
+    display:grid;place-items:center;cursor:pointer;position:relative}
+  .bell.on{color:var(--text)}
+  .bell.on::after{content:"";position:absolute;top:7px;inset-inline-end:8px;width:7px;height:7px;border-radius:50%;background:#2bd98f}
+  .star{position:absolute;top:7px;inset-inline-end:8px;font-style:normal;font-size:12px;color:#ffd166}
+  .card{max-height:88dvh;overflow:auto}
+  .toast{position:fixed;inset-inline:12px;top:calc(64px + var(--safe-t));z-index:20;display:flex;
+    flex-direction:column;gap:6px;max-width:560px;margin:0 auto}
+  .toast[hidden]{display:none}
+  .toast button{background:var(--surface);border:0;border-inline-start:4px solid var(--c,#999);color:var(--text);
+    padding:11px 12px;border-radius:10px;text-align:start;font:inherit;font-size:13.5px;
+    box-shadow:0 6px 20px rgba(0,0,0,.45);cursor:pointer}
+  .opt{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);font-size:14px;gap:10px}
+  .opt small{display:block;color:var(--muted);font-size:11.5px;margin-top:2px;line-height:1.6}
+  .opt .ctl{display:flex;align-items:center;gap:10px;flex:none}
+  .opt input[type=checkbox]{appearance:none;-webkit-appearance:none;width:44px;height:26px;border-radius:13px;
+    background:var(--mid);position:relative;flex:none;transition:background .2s;cursor:pointer;margin:0}
+  .opt input[type=checkbox]::after{content:"";position:absolute;top:3px;inset-inline-start:3px;width:20px;height:20px;
+    border-radius:50%;background:#fff;transition:inset-inline-start .2s}
+  .opt input[type=checkbox]:checked{background:var(--os)}
+  .opt input[type=checkbox]:checked::after{inset-inline-start:21px}
+  .opt input[type=checkbox]:disabled{opacity:.35}
+  .opt input[type=number]{width:62px;background:var(--bg);color:var(--text);border:1px solid var(--line);
+    border-radius:8px;font:inherit;padding:7px 4px;text-align:center}
+  .gauge,.meter,.ramp,.ticks{direction:ltr}
+  .lvl{border-bottom:1px solid var(--line);padding-bottom:14px}
+  .lvl .opt{border-bottom:0;padding-bottom:8px}
+  .rng{-webkit-appearance:none;appearance:none;display:block;width:100%;height:10px;border-radius:5px;
+    outline:none;direction:ltr;margin:10px 0 6px;touch-action:none;
+    background:linear-gradient(to right,var(--os) 0,var(--os) 30%,var(--mid) 30%,var(--mid) 70%,var(--ob) 70%,var(--ob) 100%)}
+  .rng::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:28px;height:28px;border-radius:50%;
+    background:#fff;border:0;box-shadow:0 0 0 3px var(--surface),0 2px 8px rgba(0,0,0,.5)}
+  .rng::-moz-range-thumb{width:28px;height:28px;border-radius:50%;background:#fff;border:0;
+    box-shadow:0 0 0 3px var(--surface),0 2px 8px rgba(0,0,0,.5)}
+  .rng:focus-visible{outline:2px solid var(--text);outline-offset:6px}
+  .rng:disabled{opacity:.35}
+  .scale{display:flex;justify-content:space-between;direction:ltr;font-size:11px;color:var(--muted)}
+  .opt b{font-weight:700}
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -121,7 +160,12 @@
 <header>
   <div class="top">
     <h1>خريطة RSI</h1>
-    <div class="live" id="live" data-s="loading"><span class="dot"></span><span id="liveTxt">جارٍ التحميل</span></div>
+    <div class="hd">
+      <div class="live" id="live" data-s="loading"><span class="dot"></span><span id="liveTxt">جارٍ التحميل</span></div>
+      <button class="bell" id="bell" aria-label="التنبيهات">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      </button>
+    </div>
   </div>
   <div class="seg" id="seg" role="group" aria-label="الإطار الزمني"></div>
 </header>
@@ -144,6 +188,7 @@
       <button class="chip" data-f="all" aria-pressed="true">الكل</button>
       <button class="chip" data-f="os" aria-pressed="false">أقل من 30</button>
       <button class="chip" data-f="ob" aria-pressed="false">أكثر من 70</button>
+      <button class="chip" data-f="fav" aria-pressed="false">★ مفضلة</button>
     </div>
     <select id="sort" aria-label="الترتيب">
       <option value="vol">حجم التداول</option>
@@ -173,6 +218,11 @@
   <div class="card" role="dialog" aria-modal="true" id="card"></div>
 </div>
 
+<div class="sheet" id="asheet" hidden>
+  <div class="card" role="dialog" aria-modal="true" id="acard"></div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
 <script>
 (() => {
   const $ = s => document.querySelector(s);
@@ -187,6 +237,92 @@
   try { saved = JSON.parse(localStorage.getItem('rsimap') || '{}'); } catch(_) {}
   const S = { tf: TFS.some(t => t[0] === saved.tf) ? saved.tf : '15m', sort: saved.sort || 'vol', n: Number.isFinite(saved.n) ? saved.n : 0, filter: 'all', q: '', sel: null };
   const save = () => { try { localStorage.setItem('rsimap', JSON.stringify({tf:S.tf, sort:S.sort, n:S.n})); } catch(_) {} };
+
+  /* ---------- alerts ---------- */
+  const COOLDOWN = 10 * 60 * 1000;
+  const CAN_VIB = 'vibrate' in navigator;
+  let A = { on:false, sound:true, vib:true, wake:false, useOS:true, useOB:true, os:30, ob:70, scope:'top50' };
+  try { Object.assign(A, JSON.parse(localStorage.getItem('rsialert') || '{}')); } catch(_) {}
+  const saveA = () => { try { localStorage.setItem('rsialert', JSON.stringify(A)); } catch(_) {} };
+  let fav = new Set();
+  try { fav = new Set(JSON.parse(localStorage.getItem('rsifav') || '[]')); } catch(_) {}
+  const saveFav = () => { try { localStorage.setItem('rsifav', JSON.stringify([...fav])); } catch(_) {} };
+
+  // zone: 0 neutral, -1 oversold, 1 overbought (with 2-point hysteresis). Returns the zone just entered, if any.
+  function updateZone(c){
+    const r = c.rsi; let z = c.zone || 0, entered = 0;
+    if (r == null) return 0;
+    if (z !== -1 && r <= A.os){ z = -1; entered = -1; }
+    else if (z !== 1 && r >= A.ob){ z = 1; entered = 1; }
+    else if (z === -1 && r > A.os + 2) z = 0;
+    else if (z === 1 && r < A.ob - 2) z = 0;
+    c.zone = z;
+    return entered;
+  }
+
+  let actx = null;
+  function unlockAudio(){
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+    } catch(_) {}
+  }
+  document.addEventListener('pointerdown', unlockAudio, { passive: true });
+  function tone(f, t0, d){
+    const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime + t0;
+    o.type = 'sine'; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.35, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g); g.connect(actx.destination);
+    o.start(t); o.stop(t + d + 0.05);
+  }
+  function beep(zs){
+    if (!actx) return;
+    if (actx.state === 'suspended') actx.resume();
+    let t = 0;
+    if (zs.has(-1)){ tone(660, t, .18); tone(880, t + .2, .3); t += .7; }   // oversold: rising
+    if (zs.has(1)){  tone(880, t, .18); tone(520, t + .2, .3); }            // overbought: falling
+  }
+
+  let wl = null;
+  async function setWake(on){
+    try {
+      if (on && 'wakeLock' in navigator && !wl){
+        wl = await navigator.wakeLock.request('screen');
+        wl.addEventListener('release', () => { wl = null; });
+      } else if (!on && wl){ await wl.release(); wl = null; }
+    } catch(_) {}
+  }
+
+  let toastT = null;
+  function showToast(items){
+    const box = $('#toast');
+    box.innerHTML = items.slice(0, 4).map(a =>
+      `<button data-s="${a.c.sym}" style="--c:${a.z === -1 ? '#2bd98f' : '#ff6b82'}"><b class="num">${a.c.base}</b> — RSI <span class="num">${a.rsi.toFixed(1)}</span> ${a.z === -1 ? 'تشبّع بيعي' : 'تشبّع شرائي'}</button>`
+    ).join('') + (items.length > 4 ? `<button disabled>و ${items.length - 4} عملات أخرى</button>` : '');
+    box.hidden = false;
+    clearTimeout(toastT);
+    toastT = setTimeout(() => { box.hidden = true; }, 7000);
+  }
+  function fire(items){
+    const zs = new Set(items.map(a => a.z));
+    if (A.sound) beep(zs);
+    if (A.vib && CAN_VIB) { try { navigator.vibrate(zs.has(1) && !zs.has(-1) ? [400, 120, 400] : [220, 90, 220]); } catch(_) {} }
+    showToast(items);
+  }
+  const queue = [], lastAlert = new Map();
+  let qTimer = null;
+  function maybeAlert(c, z){
+    if (!A.on) return;
+    if ((z === -1 && !A.useOS) || (z === 1 && !A.useOB)) return;
+    if (!(A.scope === 'all' || (A.scope === 'top50' && c.rank < 50) || (A.scope === 'fav' && fav.has(c.sym)))) return;
+    const k = c.sym + z, now = Date.now();
+    if (now - (lastAlert.get(k) || 0) < COOLDOWN) return;
+    lastAlert.set(k, now);
+    queue.push({ c, z, rsi: c.rsi });
+    if (!qTimer) qTimer = setTimeout(() => { qTimer = null; const it = queue.splice(0); if (it.length) fire(it); }, 800);
+  }
 
   /* ---------- RSI (Wilder) ---------- */
   function rsi(c, p = PERIOD){
@@ -266,6 +402,7 @@
         c.open = k[k.length - 1][0];
         c.price = c.closes[c.closes.length - 1];
         c.rsi = rsi(c.closes);
+        updateZone(c);
         return;
       } catch(_) { await new Promise(r => setTimeout(r, 600)); }
     }
@@ -287,7 +424,7 @@
         .filter(x => x.vol > 0 && !STABLE.has(x.base))
         .sort((a, b) => b.vol - a.vol)
         .slice(0, S.n > 0 ? S.n : undefined);
-      coins = new Map(list.map(c => [c.sym, { ...c, closes: [], rsi: null, open: 0 }]));
+      coins = new Map(list.map((c, i) => [c.sym, { ...c, rank: i, zone: 0, closes: [], rsi: null, open: 0 }]));
       for (let i = 0; i < list.length; i += 20){
         await Promise.all(list.slice(i, i + 20).map(c => loadKlines(coins.get(c.sym))));
         if (id !== loadId) return;
@@ -370,6 +507,8 @@
     else return;
     c.price = cl;
     c.rsi = rsi(c.closes);
+    const z = updateZone(c);
+    if (z) maybeAlert(c, z);
     schedule(1500);
   }
   setInterval(() => {
@@ -398,6 +537,7 @@
     // filter + sort
     let arr = all;
     if (S.q) arr = arr.filter(c => c.base.includes(S.q));
+    if (S.filter === 'fav') arr = arr.filter(c => fav.has(c.sym));
     if (S.filter === 'os') arr = arr.filter(c => c.rsi < 30);
     if (S.filter === 'ob') arr = arr.filter(c => c.rsi > 70);
     const by = { vol:(x, y) => y.vol - x.vol, low:(x, y) => x.rsi - y.rsi, high:(x, y) => y.rsi - x.rsi, chg:(x, y) => y.chg - x.chg }[S.sort];
@@ -406,7 +546,7 @@
     $('#shown').textContent = arr.length;
     $('#grid').innerHTML = arr.length ? arr.map(c => `
       <button class="tile" data-s="${c.sym}" style="--c:${color(c.rsi)}" aria-label="${c.base} RSI ${c.rsi.toFixed(1)}">
-        <span class="sym num">${c.base}</span>
+        <span class="sym num">${c.base}</span>${fav.has(c.sym) ? '<i class="star">★</i>' : ''}
         <span class="rsi num">${c.rsi.toFixed(1)}</span>
         <span class="chg num">${sgn(c.chg)}</span>
         <span class="meter"><u style="width:${c.rsi.toFixed(1)}%"></u></span>
@@ -432,9 +572,11 @@
       </div>
       <div class="actions">
         <a href="https://www.binance.com/en/trade/${c.base}_USDT" target="_blank" rel="noopener">فتح في Binance</a>
+        <button id="favBtn">${fav.has(c.sym) ? '★ في المفضلة' : '☆ للمفضلة'}</button>
         <button id="closeSheet">إغلاق</button>
       </div>`;
     $('#closeSheet').onclick = closeSheet;
+    $('#favBtn').onclick = () => { fav.has(c.sym) ? fav.delete(c.sym) : fav.add(c.sym); saveFav(); render(); };
   }
   function openSheet(sym){ S.sel = sym; $('#sheet').hidden = false; renderSheet(); }
   function closeSheet(){ S.sel = null; $('#sheet').hidden = true; }
@@ -472,6 +614,69 @@
     else if (!ws || ws.readyState > 1) connectWS();
   });
   window.addEventListener('online', () => { if (!ws || ws.readyState > 1) loadAll(); });
+
+  /* ---------- alert settings sheet ---------- */
+  function updateBell(){ $('#bell').classList.toggle('on', A.on); }
+  function renderAlerts(){
+    const chk = v => v ? 'checked' : '';
+    $('#acard').innerHTML = `
+      <h2>التنبيهات</h2>
+      <div class="sub">تعمل والتطبيق مفتوح على الشاشة فقط. حرّك الشريطين لاختيار مستوى RSI من 0 إلى 100.</div>
+      <div class="rows">
+        <label class="opt"><span>تفعيل التنبيهات</span><span class="ctl"><input type="checkbox" id="a_on" ${chk(A.on)}></span></label>
+        <label class="opt"><span>صوت</span><span class="ctl"><input type="checkbox" id="a_sound" ${chk(A.sound)}></span></label>
+        <label class="opt"><span>اهتزاز${CAN_VIB ? '' : '<small>غير مدعوم في هذا الجهاز (آيفون لا يدعمه)</small>'}</span><span class="ctl"><input type="checkbox" id="a_vib" ${chk(A.vib && CAN_VIB)} ${CAN_VIB ? '' : 'disabled'}></span></label>
+        <label class="opt"><span>إبقاء الشاشة مفتوحة<small>يمنع القفل التلقائي حتى لا تتوقف التنبيهات</small></span><span class="ctl"><input type="checkbox" id="a_wake" ${chk(A.wake)}></span></label>
+        <div class="lvl">
+          <label class="opt"><span>تنبيه عندما يهبط RSI إلى <b class="num" id="v_os">${A.os}</b> أو أقل</span><span class="ctl"><input type="checkbox" id="a_useOS" ${chk(A.useOS)}></span></label>
+          <input type="range" class="rng" id="a_os" min="0" max="100" step="1" value="${A.os}" aria-label="مستوى التشبّع البيعي">
+          <div class="scale num"><span>0</span><span>50</span><span>100</span></div>
+        </div>
+        <div class="lvl">
+          <label class="opt"><span>تنبيه عندما يصعد RSI إلى <b class="num" id="v_ob">${A.ob}</b> أو أكثر</span><span class="ctl"><input type="checkbox" id="a_useOB" ${chk(A.useOB)}></span></label>
+          <input type="range" class="rng" id="a_ob" min="0" max="100" step="1" value="${A.ob}" aria-label="مستوى التشبّع الشرائي">
+          <div class="scale num"><span>0</span><span>50</span><span>100</span></div>
+        </div>
+        <div class="opt"><span>العملات المراقبة<small>تجنّب «الكل» إن أزعجتك كثرة التنبيهات</small></span><span class="ctl"><select id="a_scope">
+          <option value="top50" ${A.scope === 'top50' ? 'selected' : ''}>أعلى 50 تداولًا</option>
+          <option value="fav" ${A.scope === 'fav' ? 'selected' : ''}>المفضلة فقط</option>
+          <option value="all" ${A.scope === 'all' ? 'selected' : ''}>كل العملات</option></select></span></div>
+      </div>
+      <div class="actions"><button id="a_test">تجربة التنبيه</button><button id="a_close">إغلاق</button></div>
+      <p class="note">يُنبَّه مرة واحدة عند دخول العملة المنطقة، ولا يتكرر لها قبل 10 دقائق. أضف عملات للمفضلة من نافذة العملة ثم اختر «المفضلة فقط». على آيفون يتبع الصوت زر الصامت.</p>`;
+  }
+  function openAlerts(){ $('#asheet').hidden = false; renderAlerts(); }
+  function closeAlerts(){ $('#asheet').hidden = true; }
+  $('#bell').onclick = openAlerts;
+  $('#asheet').addEventListener('click', e => {
+    if (e.target.id === 'asheet' || e.target.id === 'a_close') closeAlerts();
+    if (e.target.id === 'a_test'){ unlockAudio(); fire([{ c:{ sym:'', base:'تجربة' }, z:-1, rsi:28.4 }]); }
+  });
+  $('#asheet').addEventListener('change', e => {
+    const id = e.target.id, v = e.target;
+    if (id === 'a_on'){
+      A.on = v.checked; unlockAudio(); setWake(A.on && A.wake); updateBell();
+    } else if (id === 'a_sound') A.sound = v.checked;
+    else if (id === 'a_vib') A.vib = v.checked;
+    else if (id === 'a_wake'){ A.wake = v.checked; setWake(A.on && A.wake); }
+    else if (id === 'a_useOS') A.useOS = v.checked;
+    else if (id === 'a_useOB') A.useOB = v.checked;
+    else if (id === 'a_scope') A.scope = v.value;
+    saveA();
+  });
+  $('#asheet').addEventListener('input', e => {
+    const id = e.target.id, v = Math.round(+e.target.value);
+    if (id === 'a_os'){ A.os = Math.min(v, A.ob - 1); e.target.value = A.os; $('#v_os').textContent = A.os; }
+    else if (id === 'a_ob'){ A.ob = Math.max(v, A.os + 1); e.target.value = A.ob; $('#v_ob').textContent = A.ob; }
+  });
+  $('#toast').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    $('#toast').hidden = true;
+    if (coins.has(b.dataset.s)) openSheet(b.dataset.s);
+  });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && A.on && A.wake) setWake(true); });
+  updateBell();
+  if (A.on && A.wake) setWake(true);
 
   buildSeg();
   loadAll();
