@@ -41,7 +41,7 @@
   .live[data-s=error] .dot{background:var(--ob)}
   @keyframes pulse{50%{opacity:.25}}
 
-  .seg{display:grid;grid-template-columns:repeat(4,1fr);background:var(--surface);
+  .seg{display:grid;grid-template-columns:repeat(2,1fr);background:var(--surface);
     border-radius:12px;padding:3px;gap:3px}
   .seg button{border:0;background:transparent;color:var(--muted);font:inherit;font-size:13px;
     font-weight:500;padding:9px 0;border-radius:9px;cursor:pointer}
@@ -66,7 +66,11 @@
   select{background:var(--surface);color:var(--text);border:1px solid var(--line);
     border-radius:10px;font:inherit;font-size:12.5px;padding:7px 8px}
 
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px}
+  .search{flex:1 1 100%;background:var(--surface);color:var(--text);border:1px solid var(--line);
+    border-radius:10px;font:inherit;font-size:14px;padding:10px 12px;outline:none}
+  .search:focus{border-color:var(--muted)}
+  .search::placeholder{color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px}
   .tile{position:relative;border:0;text-align:start;color:#f4f7fc;background:var(--c,var(--mid));
     border-radius:10px;padding:9px 10px 14px;min-height:82px;font:inherit;cursor:pointer;
     display:flex;flex-direction:column;gap:1px;overflow:hidden}
@@ -131,9 +135,11 @@
       <span>تشبّع شرائي<b class="num" id="nC">0</b></span>
     </div>
     <div class="avg">متوسط RSI للسوق: <b class="num" id="avg">—</b></div>
+    <div class="avg">المعروض: <b class="num" id="shown">0</b> من <b class="num" id="total">0</b> عملة</div>
   </section>
 
   <div class="tools">
+    <input class="search" id="q" type="search" placeholder="ابحث عن عملة، مثل BTC" autocomplete="off" autocapitalize="characters" spellcheck="false">
     <div class="chips" id="chips">
       <button class="chip" data-f="all" aria-pressed="true">الكل</button>
       <button class="chip" data-f="os" aria-pressed="false">أقل من 30</button>
@@ -146,9 +152,10 @@
       <option value="chg">تغيّر 24 ساعة</option>
     </select>
     <select id="count" aria-label="عدد العملات">
-      <option value="30">30 عملة</option>
-      <option value="50">50 عملة</option>
-      <option value="100">100 عملة</option>
+      <option value="0">كل العملات</option>
+      <option value="200">أعلى 200</option>
+      <option value="100">أعلى 100</option>
+      <option value="50">أعلى 50</option>
     </select>
   </div>
 
@@ -158,7 +165,7 @@
   <section class="legend">
     <div class="ramp" id="ramp"></div>
     <div class="ticks"><span class="num">0</span><span class="num">30</span><span class="num">50</span><span class="num">70</span><span class="num">100</span></div>
-    <p class="note">RSI(14) محسوب من شموع Binance لأزواج USDT الأعلى تداولًا، ويتحدّث لحظيًا مع كل تداول. القيم الأقل من 30 تُقرأ تشبّعًا بيعيًا، والأعلى من 70 تشبّعًا شرائيًا. للاطلاع فقط وليس نصيحة مالية.</p>
+    <p class="note">RSI(14) محسوب من شموع Binance لكل أزواج USDT، ويتحدّث لحظيًا مع كل تداول. القيم الأقل من 30 تُقرأ تشبّعًا بيعيًا، والأعلى من 70 تشبّعًا شرائيًا. للاطلاع فقط وليس نصيحة مالية.</p>
   </section>
 </main>
 
@@ -169,7 +176,7 @@
 <script>
 (() => {
   const $ = s => document.querySelector(s);
-  const TFS = [['15m','15 دقيقة'],['1h','ساعة'],['4h','4 ساعات'],['1d','يوم']];
+  const TFS = [['5m','5 دقائق'],['15m','15 دقيقة']];
   const TF_NAME = Object.fromEntries(TFS);
   const PERIOD = 14;
   const STABLE = new Set(['USDC','FDUSD','TUSD','USDP','DAI','BUSD','EUR','AEUR','USDE','XUSD','USD1','PYUSD','UST','GBP','TRY','BRL']);
@@ -178,7 +185,7 @@
 
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem('rsimap') || '{}'); } catch(_) {}
-  const S = { tf: saved.tf || '1h', sort: saved.sort || 'vol', n: saved.n || 50, filter: 'all', sel: null };
+  const S = { tf: TFS.some(t => t[0] === saved.tf) ? saved.tf : '15m', sort: saved.sort || 'vol', n: Number.isFinite(saved.n) ? saved.n : 0, filter: 'all', q: '', sel: null };
   const save = () => { try { localStorage.setItem('rsimap', JSON.stringify({tf:S.tf, sort:S.sort, n:S.n})); } catch(_) {} };
 
   /* ---------- RSI (Wilder) ---------- */
@@ -251,14 +258,17 @@
   function hideMsg(){ $('#msg').hidden = true; }
 
   async function loadKlines(c){
-    try {
-      const k = await api(`/api/v3/klines?symbol=${c.sym}&interval=${S.tf}&limit=150`);
-      if (!k.length) return;
-      c.closes = k.map(x => +x[4]);
-      c.open = k[k.length - 1][0];
-      c.price = c.closes[c.closes.length - 1];
-      c.rsi = rsi(c.closes);
-    } catch(_) {}
+    for (let attempt = 0; attempt < 2; attempt++){
+      try {
+        const k = await api(`/api/v3/klines?symbol=${c.sym}&interval=${S.tf}&limit=100`);
+        if (!k.length) return;
+        c.closes = k.map(x => +x[4]);
+        c.open = k[k.length - 1][0];
+        c.price = c.closes[c.closes.length - 1];
+        c.rsi = rsi(c.closes);
+        return;
+      } catch(_) { await new Promise(r => setTimeout(r, 600)); }
+    }
   }
 
   async function loadAll(){
@@ -276,10 +286,10 @@
         .map(x => ({ sym:x.symbol, base:x.symbol.slice(0, -4), vol:+x.quoteVolume, chg:+x.priceChangePercent, price:+x.lastPrice }))
         .filter(x => x.vol > 0 && !STABLE.has(x.base))
         .sort((a, b) => b.vol - a.vol)
-        .slice(0, S.n);
+        .slice(0, S.n > 0 ? S.n : undefined);
       coins = new Map(list.map(c => [c.sym, { ...c, closes: [], rsi: null, open: 0 }]));
-      for (let i = 0; i < list.length; i += 10){
-        await Promise.all(list.slice(i, i + 10).map(c => loadKlines(coins.get(c.sym))));
+      for (let i = 0; i < list.length; i += 20){
+        await Promise.all(list.slice(i, i + 20).map(c => loadKlines(coins.get(c.sym))));
         if (id !== loadId) return;
         schedule(150);
       }
@@ -295,7 +305,7 @@
 
   async function refreshCloses(){
     const arr = [...coins.values()];
-    for (let i = 0; i < arr.length; i += 10) await Promise.all(arr.slice(i, i + 10).map(loadKlines));
+    for (let i = 0; i < arr.length; i += 20) await Promise.all(arr.slice(i, i + 20).map(loadKlines));
     schedule(100);
   }
 
@@ -323,8 +333,14 @@
     ws = sock;
     sock.onopen = () => {
       const params = [...coins.keys()].map(s => `${s.toLowerCase()}@kline_${S.tf}`);
-      for (let i = 0; i < params.length; i += 50)
-        sock.send(JSON.stringify({ method:'SUBSCRIBE', params: params.slice(i, i + 50), id: i + 1 }));
+      let i = 0;
+      const send = () => {
+        if (gen !== wsGen || sock.readyState !== 1) return;
+        sock.send(JSON.stringify({ method:'SUBSCRIBE', params: params.slice(i, i + 100), id: i + 1 }));
+        i += 100;
+        if (i < params.length) setTimeout(send, 300);
+      };
+      send();
       lastMsg = Date.now();
       setStatus('live');
       hideMsg();
@@ -354,7 +370,7 @@
     else return;
     c.price = cl;
     c.rsi = rsi(c.closes);
-    schedule(1000);
+    schedule(1500);
   }
   setInterval(() => {
     if (ws && ws.readyState === 1 && Date.now() - lastMsg > 25000) { try { ws.close(); } catch(_) {} }
@@ -377,14 +393,17 @@
     $('#bA').style.flexGrow = a; $('#bB').style.flexGrow = b; $('#bC').style.flexGrow = c3;
     $('#nA').textContent = a; $('#nB').textContent = b; $('#nC').textContent = c3;
     $('#avg').textContent = (sum / all.length).toFixed(1);
+    $('#total').textContent = all.length;
 
     // filter + sort
     let arr = all;
+    if (S.q) arr = arr.filter(c => c.base.includes(S.q));
     if (S.filter === 'os') arr = arr.filter(c => c.rsi < 30);
     if (S.filter === 'ob') arr = arr.filter(c => c.rsi > 70);
     const by = { vol:(x, y) => y.vol - x.vol, low:(x, y) => x.rsi - y.rsi, high:(x, y) => y.rsi - x.rsi, chg:(x, y) => y.chg - x.chg }[S.sort];
     arr = [...arr].sort(by);
 
+    $('#shown').textContent = arr.length;
     $('#grid').innerHTML = arr.length ? arr.map(c => `
       <button class="tile" data-s="${c.sym}" style="--c:${color(c.rsi)}" aria-label="${c.base} RSI ${c.rsi.toFixed(1)}">
         <span class="sym num">${c.base}</span>
@@ -439,6 +458,8 @@
     document.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', x === b));
     render();
   });
+  let qt = null;
+  $('#q').addEventListener('input', e => { S.q = e.target.value.trim().toUpperCase(); clearTimeout(qt); qt = setTimeout(render, 150); });
   $('#sort').onchange = e => { S.sort = e.target.value; save(); render(); };
   $('#count').onchange = e => { S.n = +e.target.value; save(); opened = false; loadAll(); };
   $('#sort').value = S.sort;
